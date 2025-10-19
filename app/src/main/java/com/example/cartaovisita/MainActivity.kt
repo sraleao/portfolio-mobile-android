@@ -6,7 +6,10 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -20,6 +23,13 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavType
+import androidx.navigation.compose.*
+import androidx.navigation.navArgument
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.ui.graphics.Brush
+import androidx.navigation.compose.rememberNavController
 import com.example.cartaovisita.ui.theme.CartaoVisitaTheme
 
 class MainActivity : ComponentActivity() {
@@ -28,35 +38,72 @@ class MainActivity : ComponentActivity() {
         setContent {
             CartaoVisitaTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    CartaoDeVisitas()
+                    AppNavigation()
                 }
             }
         }
     }
 }
 
+// --- Navegação ---
 @Composable
-fun CartaoDeVisitas() {
+fun AppNavigation() {
+    val navController = rememberNavController()
+
+    NavHost(navController = navController, startDestination = "perfil") {
+        composable("perfil") {
+            CartaoDeVisitas(
+                onVerProjetosClick = {
+                    navController.navigate("projetos")
+                }
+            )
+        }
+
+        composable("projetos") {
+            TelaListaProjetos(
+                onProjetoClick = { projetoId ->
+                    navController.navigate("detalhes/$projetoId")
+                },
+                onVoltar = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = "detalhes/{id}",
+            arguments = listOf(navArgument("id") { type = NavType.IntType })
+        ) { backStackEntry ->
+            val id = backStackEntry.arguments?.getInt("id") ?: 0
+            TelaDetalhesProjeto(id, onVoltar = { navController.popBackStack() })
+        }
+    }
+}
+
+// --- Tela de Perfil ---
+@Composable
+fun CartaoDeVisitas(onVerProjetosClick: () -> Unit) {
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.TopCenter
     ) {
-        // Fundo curvado (metade inferior da tela)
+        // Fundo curvado
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(0.55f)
                 .align(Alignment.BottomCenter)
                 .clip(RoundedCornerShape(topStart = 40.dp, topEnd = 40.dp))
-                .background(Color(0xFF04497E)) // azul escuro
-        )
+                .background(brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF6E270D),
+                        Color(0xFFBE6A53)
+        ))))
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center, // centraliza os elementos na vertical
+            verticalArrangement = Arrangement.Center,
             modifier = Modifier.fillMaxSize()
         ) {
-            // Foto redonda sobreposta
+            // Foto
             Image(
                 painter = painterResource(id = R.drawable.foto),
                 contentDescription = "Avatar",
@@ -65,20 +112,17 @@ fun CartaoDeVisitas() {
                     .size(300.dp)
                     .clip(CircleShape)
                     .border(4.dp, Color.White, CircleShape)
-                    .offset(y = 0.dp) // empurra para sobrepor fundo curvado
             )
 
             Spacer(modifier = Modifier.height(50.dp))
 
-            // Nome
+            // Nome e profissão
             Text(
                 text = "Ellen Leao",
                 fontSize = 45.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
             )
-
-            // Profissão
             Text(
                 text = "Tecnologista em Sistemas para Internet",
                 fontSize = 18.sp,
@@ -86,23 +130,35 @@ fun CartaoDeVisitas() {
                 color = Color.White
             )
 
-            Spacer(modifier = Modifier.height(80.dp))
+            Spacer(modifier = Modifier.height(50.dp))
 
-            // Ícones de contato (dispostos em grade 2x2)
+            // Ícones de contato
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(32.dp)
-                ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
                     IconeContato(R.drawable.ic_phone)
                     IconeContato(R.drawable.ic_email)
                 }
                 Spacer(modifier = Modifier.height(24.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(32.dp)
-                ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
                     IconeContato(R.drawable.ic_github)
                     IconeContato(R.drawable.ic_location)
                 }
+            }
+
+            Spacer(modifier = Modifier.height(40.dp))
+
+            // Botão "Ver Meus Projetos" centralizado
+            Button(
+                onClick = onVerProjetosClick,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0x750E0E0E)),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("Conheça meus Projetos", style = MaterialTheme.typography.labelLarge.copy(
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                ),
+                    color = Color.White)
             }
         }
     }
@@ -122,5 +178,124 @@ fun IconeContato(icone: Int) {
             contentDescription = null,
             modifier = Modifier.size(55.dp)
         )
+    }
+}
+
+// --- Dados Mock ---
+data class Projeto(val id: Int, val nome: String, val descricao: String)
+
+val mockProjetos = listOf(
+    Projeto(1, "App de Biblioteca", "Aplicativo que faz gerenciamento de livros e empréstimos."),
+    Projeto(2, "Catálogo de Livros", "Aplicativo que exibe catálogo de livros."),
+    Projeto(3, "App de comida", "Aplicativo que faz pedidos de comida"),
+    Projeto(4, "Site Pessoal", "Página web com portfólio e contatos.")
+)
+
+// --- Tela de Lista de Projetos ---
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TelaListaProjetos(onProjetoClick: (Int) -> Unit, onVoltar: () -> Unit) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Meus Projetos") },
+                navigationIcon = {
+                    IconButton(onClick = onVoltar) {
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Voltar")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF6E270D),
+                            Color(0xFFBE6A53)
+                        )
+                    )
+                )
+                .padding(padding)
+        ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(mockProjetos) { projeto ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(160.dp)
+                            .clickable { onProjetoClick(projeto.id) },
+                        shape = RoundedCornerShape(16.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color.White.copy(alpha = 0.6f))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(projeto.nome, fontWeight = FontWeight.Bold, fontSize = 30.sp)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(projeto.descricao)
+                        }
+                    }
+                }
+            }
+        }
+}}
+
+// --- Tela de Detalhes do Projeto ---
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TelaDetalhesProjeto(id: Int, onVoltar: () -> Unit) {
+    val projeto = mockProjetos.find { it.id == id }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(projeto?.nome ?: "Detalhes") },
+                navigationIcon = {
+                    IconButton(onClick = onVoltar) {
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Voltar")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF6E270D),
+                            Color(0xFFBE6A53)
+                        )
+                    )
+                )
+                .padding(padding)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "ID do projeto: ${projeto?.id}",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(text = projeto?.descricao ?: "Descrição não encontrada", color = Color.White)
+        }    }
     }
 }
