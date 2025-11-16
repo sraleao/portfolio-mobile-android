@@ -13,12 +13,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -26,11 +28,16 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
+import com.example.cartaovisita.data.local.AppDatabase
+import com.example.cartaovisita.data.remote.RetrofitInstance
+import com.example.cartaovisita.repository.ProjectRepository
+import com.example.cartaovisita.ui.theme.CartaoVisitaTheme
+import com.example.cartaovisita.ui.viewmodel.ProjectListViewModel
+import com.example.cartaovisita.ui.viewmodel.ProjectListViewModelFactory
+import com.example.cartaovisita.ui.viewmodel.UiState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.ui.graphics.Brush
-import androidx.navigation.compose.rememberNavController
-import com.example.cartaovisita.ui.theme.CartaoVisitaTheme
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,12 +52,33 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// --- Navegação ---
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
+    val context = LocalContext.current
+
+    // Banco de dados
+    val db = remember {
+        androidx.room.Room.databaseBuilder(
+            context,
+            AppDatabase::class.java,
+            "app_database"
+        ).fallbackToDestructiveMigration().build()
+    }
+    val dao = db.projectDao()
+
+    // Repository com usuário GitHub: sraleao
+    val repository = remember {
+        ProjectRepository(dao, RetrofitInstance.api, "sraleao")
+    }
+
+    // ViewModel
+    val viewModel: ProjectListViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+        factory = ProjectListViewModelFactory(repository)
+    )
 
     NavHost(navController = navController, startDestination = "perfil") {
+
         composable("perfil") {
             CartaoDeVisitas(
                 onVerProjetosClick = {
@@ -61,6 +89,7 @@ fun AppNavigation() {
 
         composable("projetos") {
             TelaListaProjetos(
+                viewModel = viewModel,
                 onProjetoClick = { projetoId ->
                     navController.navigate("detalhes/$projetoId")
                 },
@@ -71,14 +100,17 @@ fun AppNavigation() {
         composable(
             route = "detalhes/{id}",
             arguments = listOf(navArgument("id") { type = NavType.IntType })
-        ) { backStackEntry ->
-            val id = backStackEntry.arguments?.getInt("id") ?: 0
-            TelaDetalhesProjeto(id, onVoltar = { navController.popBackStack() })
+        ) {
+            val id = it.arguments?.getInt("id") ?: 0
+            TelaDetalhesProjeto(
+                id = id,
+                repository = repository,
+                onVoltar = { navController.popBackStack() }
+            )
         }
     }
 }
 
-// --- Tela de Perfil ---
 @Composable
 fun CartaoDeVisitas(onVerProjetosClick: () -> Unit) {
     Box(
@@ -92,18 +124,22 @@ fun CartaoDeVisitas(onVerProjetosClick: () -> Unit) {
                 .fillMaxHeight(0.55f)
                 .align(Alignment.BottomCenter)
                 .clip(RoundedCornerShape(topStart = 40.dp, topEnd = 40.dp))
-                .background(brush = Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF6E270D),
-                        Color(0xFFBE6A53)
-        ))))
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF6E270D),
+                            Color(0xFFBE6A53)
+                        )
+                    )
+                )
+        )
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
             modifier = Modifier.fillMaxSize()
         ) {
-            // Foto
+
             Image(
                 painter = painterResource(id = R.drawable.foto),
                 contentDescription = "Avatar",
@@ -116,13 +152,13 @@ fun CartaoDeVisitas(onVerProjetosClick: () -> Unit) {
 
             Spacer(modifier = Modifier.height(50.dp))
 
-            // Nome e profissão
             Text(
                 text = "Ellen Leao",
                 fontSize = 45.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
             )
+
             Text(
                 text = "Tecnologista em Sistemas para Internet",
                 fontSize = 18.sp,
@@ -132,7 +168,6 @@ fun CartaoDeVisitas(onVerProjetosClick: () -> Unit) {
 
             Spacer(modifier = Modifier.height(50.dp))
 
-            // Ícones de contato
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
                     IconeContato(R.drawable.ic_phone)
@@ -147,18 +182,17 @@ fun CartaoDeVisitas(onVerProjetosClick: () -> Unit) {
 
             Spacer(modifier = Modifier.height(40.dp))
 
-            // Botão "Ver Meus Projetos" centralizado
             Button(
                 onClick = onVerProjetosClick,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0x750E0E0E)),
                 shape = RoundedCornerShape(10.dp)
             ) {
-                Text("Conheça meus Projetos", style = MaterialTheme.typography.labelLarge.copy(
+                Text(
+                    "Conheça meus Projetos",
                     fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
-                ),
-                    color = Color.White)
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
             }
         }
     }
@@ -181,20 +215,15 @@ fun IconeContato(icone: Int) {
     }
 }
 
-// --- Dados Mock ---
-data class Projeto(val id: Int, val nome: String, val descricao: String)
-
-val mockProjetos = listOf(
-    Projeto(1, "App de Biblioteca", "Aplicativo que faz gerenciamento de livros e empréstimos."),
-    Projeto(2, "Catálogo de Livros", "Aplicativo que exibe catálogo de livros."),
-    Projeto(3, "App de comida", "Aplicativo que faz pedidos de comida"),
-    Projeto(4, "Site Pessoal", "Página web com portfólio e contatos.")
-)
-
-// --- Tela de Lista de Projetos ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TelaListaProjetos(onProjetoClick: (Int) -> Unit, onVoltar: () -> Unit) {
+fun TelaListaProjetos(
+    viewModel: ProjectListViewModel,
+    onProjetoClick: (Int) -> Unit,
+    onVoltar: () -> Unit
+) {
+    val uiState by viewModel.uiState.collectAsState()
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -207,53 +236,89 @@ fun TelaListaProjetos(onProjetoClick: (Int) -> Unit, onVoltar: () -> Unit) {
             )
         }
     ) { padding ->
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFF6E270D),
-                            Color(0xFFBE6A53)
-                        )
+                    Brush.verticalGradient(
+                        listOf(Color(0xFF6E270D), Color(0xFFBE6A53))
                     )
                 )
                 .padding(padding)
         ) {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(mockProjetos) { projeto ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(160.dp)
-                            .clickable { onProjetoClick(projeto.id) },
-                        shape = RoundedCornerShape(16.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color.White.copy(alpha = 0.6f))
+
+            when (uiState) {
+
+                UiState.Loading -> {
+                    Column(
+                        Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(projeto.nome, fontWeight = FontWeight.Bold, fontSize = 30.sp)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(projeto.descricao)
+                        CircularProgressIndicator(color = Color.White)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("Carregando projetos...", color = Color.White)
+                    }
+                }
+
+                is UiState.Error -> {
+                    Column(
+                        Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            "Erro ao carregar projetos",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                is UiState.Success -> {
+                    val projetos = (uiState as UiState.Success).projects
+
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(projetos) { projeto ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(160.dp)
+                                    .clickable { onProjetoClick(projeto.id) },
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color.White.copy(alpha = 0.6f)
+                                ),
+                                elevation = CardDefaults.cardElevation(6.dp)
+                            ) {
+                                Column(Modifier.padding(16.dp)) {
+                                    Text(projeto.nome, fontWeight = FontWeight.Bold, fontSize = 30.sp)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(projeto.descricao ?: "")
+                                }
+                            }
                         }
                     }
                 }
             }
         }
-}}
+    }
+}
 
-// --- Tela de Detalhes do Projeto ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TelaDetalhesProjeto(id: Int, onVoltar: () -> Unit) {
-    val projeto = mockProjetos.find { it.id == id }
+fun TelaDetalhesProjeto(
+    id: Int,
+    repository: ProjectRepository,
+    onVoltar: () -> Unit
+) {
+    val projeto by repository.getProjectByIdFlow(id).collectAsState(initial = null)
 
     Scaffold(
         topBar = {
@@ -267,35 +332,38 @@ fun TelaDetalhesProjeto(id: Int, onVoltar: () -> Unit) {
             )
         }
     ) { padding ->
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFF6E270D),
-                            Color(0xFFBE6A53)
-                        )
-                    )
-                )
+                .background(Brush.verticalGradient(listOf(Color(0xFF6E270D), Color(0xFFBE6A53))))
                 .padding(padding)
         ) {
+
             Column(
-                modifier = Modifier
+                Modifier
                     .fillMaxSize()
-                    .padding(padding)
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Text(
-                    text = "ID do projeto: ${projeto?.id}",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(text = projeto?.descricao ?: "Descrição não encontrada", color = Color.White)
-        }    }
+                if (projeto == null) {
+                    Text("Carregando...", color = Color.White)
+                } else {
+                    Text(
+                        "ID do projeto: ${projeto!!.id}",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        projeto!!.descricao ?: "Sem descrição",
+                        color = Color.White
+                    )
+                }
+            }
+        }
     }
 }
+
